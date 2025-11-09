@@ -57,29 +57,13 @@ private:
     QElapsedTimer timer;
 
     std::atomic<bool> isRecording{false}; // 是否正在录制
-    //qint64 startRecordTimeMs = 0; // 开始录制的时间, 毫秒
-    //QMutex isRecordingMutex;// 互斥量
-
-
     std::atomic<bool> isPlaying{false};// 是否正在播放
-    //qint64 startPlayTimeMs = 0;// 开始播放的时间, 毫秒
-    //QMutex isPlayingMutex;// 互斥量
 
-    // 记录的时间间隔 us
-    const qint64 m_recordInterval = 10;
+    // 记录的时间间隔 ms
+    const qint64 m_recordInterval = 1;
 
     // 保存的录制文件所在文件夹
     QString appDataDir;
-
-    // 添加时间控制成员变量
-    //qint64 m_lastRecordTime = 0;
-
-    // 临时存储最新的鼠标数据
-    int m_latestDeltaX = 0;
-    int m_latestDeltaY = 0;
-    // 鼠标原始数据累积量
-    int m_accumulatedDeltaX = 0;
-    int m_accumulatedDeltaY = 0;
 
     // 鼠标缩放校准因子
     float m_calibrationFactor = 1.0f;

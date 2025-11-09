@@ -2,6 +2,7 @@ QT       += core gui concurrent
 
 win32 {
     LIBS += -lUser32
+    LIBS += -lwinmm
 }
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets

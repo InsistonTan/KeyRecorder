@@ -8,6 +8,7 @@
 #include <QCursor>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <thread>
 
 MainWindow *mainWindow = nullptr;
 
@@ -108,8 +109,26 @@ MainWindow::~MainWindow()
 
 // 键盘按键是否处于被按下的状态
 bool MainWindow::isKeyPressed(int keyScanCode){
-    // 硬件扫描码转换成虚拟键码, 再获取状态
-    return (GetKeyState(MapVirtualKey(keyScanCode, MAPVK_VSC_TO_VK)) & 0x8000) != 0;
+    // 特殊处理左右修饰键
+    switch(keyScanCode) {
+    case 0x2A: // 左Shift扫描码
+        return (GetAsyncKeyState(VK_LSHIFT) & 0x8000) != 0;
+    case 0x36: // 右Shift扫描码
+        return (GetAsyncKeyState(VK_RSHIFT) & 0x8000) != 0;
+    case 0x1D: // 左Ctrl扫描码
+        return (GetAsyncKeyState(VK_LCONTROL) & 0x8000) != 0;
+    case 0xE01D: // 右Ctrl扫描码（扩展扫描码）
+        return (GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0;
+    case 0x38: // 左Alt扫描码
+        return (GetAsyncKeyState(VK_LMENU) & 0x8000) != 0;
+    case 0xE038: // 右Alt扫描码（扩展扫描码）
+        return (GetAsyncKeyState(VK_RMENU) & 0x8000) != 0;
+    default:
+        // 硬件扫描码转换成虚拟键码, 再获取状态
+        // 其他按键使用虚拟键码查询
+        int virtualKey = MapVirtualKey(keyScanCode, MAPVK_VSC_TO_VK);
+        return (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
+    }
 }
 
 bool MainWindow::isMouseButtonPressed(int mouseButtonVK){
@@ -381,6 +400,9 @@ void MainWindow::startRecordOrStop(){
 
         QtConcurrent::run([=](){
 
+            // 设置系统定时器精度为1ms
+            timeBeginPeriod(1);
+
             recordStrMutex.lock();
             // 重置录制的信息
             recordStr = "";
@@ -428,8 +450,12 @@ void MainWindow::startRecordOrStop(){
                     handleAndRecordKey(keyPressed, item.key(), &pressedKeySet, &recordStr, actionTime);
                 }
 
-                QThread::usleep(m_recordInterval);
+
+                QThread::msleep(m_recordInterval);
             }
+
+            // 恢复系统计时器精度
+            timeEndPeriod(1);
 
             QMetaObject::invokeMethod(mainWindow, [=]() {
                 // 创建一个输入对话框
@@ -510,6 +536,9 @@ void MainWindow::startPlayOrStop(){
             // 设置鼠标速度1:1
             set1To1MouseMovement();
 
+            // 设置系统定时器精度为1ms
+            timeBeginPeriod(1);
+
             // 选择的录制文件
             QString filePath = appDataDir + "/" + ui->comboBox->currentText();
             // 打开选择的录制文件
@@ -534,10 +563,8 @@ void MainWindow::startPlayOrStop(){
             // 鼠标初始位置
             int firstX = 0, firstY = 0;
 
-            // 键盘操作列表
-            QList<ActionInfo> keyboardActionList;
-            // 鼠标操作列表
-            QList<ActionInfo> mouseActionList;
+            // 操作列表
+            QList<ActionInfo> actionList;
 
             // 读取录制文件到内存
             while(getIsPlaying() && !in.atEnd()){
@@ -598,23 +625,26 @@ void MainWindow::startPlayOrStop(){
                     int dx = moveDis[0].toInt();
                     int dy = moveDis[1].toInt();
 
-                    mouseActionList.append(ActionInfo{actionTime, key, 0, dx, dy, false});
+                    //mouseActionList.append(ActionInfo{actionTime, key, 0, dx, dy, false});
+                    actionList.append(ActionInfo{actionTime, key, 0, dx, dy, false});
                 }
                 // 鼠标按键
                 else if(key.contains("mouse")){
-                    mouseActionList.append(ActionInfo{actionTime, key, 0, 0, 0, action == "release" ? true : false});
+                    //mouseActionList.append(ActionInfo{actionTime, key, 0, 0, 0, action == "release" ? true : false});
+                    actionList.append(ActionInfo{actionTime, key, 0, 0, 0, action == "release" ? true : false});
                 }else{
                     if(!VSC_MAP.contains(key)){
                         continue;
                     }
 
                     // 键盘按键
-                    keyboardActionList.append(ActionInfo{actionTime, key, VSC_MAP[key], 0, 0, action == "release" ? true : false});
+                    //keyboardActionList.append(ActionInfo{actionTime, key, VSC_MAP[key], 0, 0, action == "release" ? true : false});
+                    actionList.append(ActionInfo{actionTime, key, VSC_MAP[key], 0, 0, action == "release" ? true : false});
                 }
 
             }
 
-            if(keyboardActionList.isEmpty() && mouseActionList.isEmpty()){
+            if(actionList.isEmpty()){
                 return;
             }
 
@@ -623,60 +653,39 @@ void MainWindow::startPlayOrStop(){
                 // 移动鼠标到初始位置
                 moveMouseToPos(firstX, firstY);
 
-                // 开始播放的时间
-                //startPlayTimeMs = QDateTime::currentMSecsSinceEpoch();
+                // 高精度计时器开始计时
+                QElapsedTimer runTimer;
+                runTimer.start();
 
-                // 高精度计时器重新计时
-                timer.restart();
+                for(auto actionInfo : actionList){
+                    if(!getIsPlaying()){
+                        break;
+                    }
 
-                // 启动一个线程去处理鼠标操作
-                QFuture<void> mouseFuture = QtConcurrent::run([=](){
-                    for(auto actionInfo : mouseActionList){
-                        if(!getIsPlaying()){
-                            break;
-                        }
+                    // 还没到操作时间
+                    if(actionInfo.actionTime > runTimer.nsecsElapsed()){
+                        // 忙等待, 等待操作时间到
+                        while(true){
+                            if(actionInfo.actionTime <= runTimer.nsecsElapsed()){
+                                break;
+                            }
 
-                        // 获取当前计时时间纳秒
-                        qint64 currentActionTime = timer.nsecsElapsed();
-                        if(actionInfo.actionTime - currentActionTime >= 1000){
-                            // 等待操作时间到
-                            QThread::usleep((actionInfo.actionTime - currentActionTime)/1000);
-                        }
-
-                        // 鼠标移动
-                        if(actionInfo.actionName == "mouseMove"){
-                            // 模拟鼠标移动
-                            //simulateMouseRelativeMove(static_cast<int>(dx * m_calibrationFactor), static_cast<int>(dy * m_calibrationFactor));
-                            simulateMouseRelativeMove(actionInfo.dx, actionInfo.dy);
-                        }else{
-                            // 模拟鼠标按键
-                            simulateMouseAction(actionInfo.actionName, actionInfo.isRelease);
+                            QThread::msleep(1);
                         }
                     }
-                });
 
-                // 再启动一个线程去处理键盘操作
-                QFuture<void> keyboardFuture = QtConcurrent::run([=](){
-                    for(auto actionInfo : keyboardActionList){
-                        if(!getIsPlaying()){
-                            break;
-                        }
-
-                        // 获取当前计时时间纳秒
-                        qint64 currentActionTime = timer.nsecsElapsed();
-                        if(actionInfo.actionTime - currentActionTime >= 1000){
-                            // 等待操作时间到
-                            QThread::usleep((actionInfo.actionTime - currentActionTime)/1000);
-                        }
-
+                    // 鼠标移动
+                    if(actionInfo.actionName == "mouseMove"){
+                        // 模拟鼠标移动
+                        simulateMouseRelativeMove(actionInfo.dx, actionInfo.dy);
+                    }else if(actionInfo.actionName.contains("mouse")){
+                        // 模拟鼠标按键
+                        simulateMouseAction(actionInfo.actionName, actionInfo.isRelease);
+                    }else{
                         // 模拟键盘按键
                         simulateKeyPress(actionInfo.keyboardScanCode, actionInfo.isRelease);
                     }
-                });
-
-                // 等待两个线程都完成
-                mouseFuture.waitForFinished();
-                keyboardFuture.waitForFinished();
+                }
 
                 // 等待一下再进入下一轮循环
                 QThread::msleep(500);
@@ -684,6 +693,9 @@ void MainWindow::startPlayOrStop(){
 
             // 恢复鼠标速度
             restoreMouseSettings();
+
+            // 在线程结束前恢复默认精度
+            timeEndPeriod(1);
         });
     }
 }
@@ -783,15 +795,12 @@ void MainWindow::processRawInput(HRAWINPUT rawInput)
         const RAWMOUSE& mouse = raw->data.mouse;
 
         int deltaX = 0, deltaY = 0;
-        //int buttonFlags = 0;
 
         // 处理相对移动
         if (mouse.usFlags == MOUSE_MOVE_RELATIVE) {
             deltaX = mouse.lLastX;
             deltaY = mouse.lLastY;
 
-            // // 检查是否到达记录时间
-            //qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
             //正在录制, 记录
             if(getIsRecording() && (deltaX != 0 || deltaY != 0)){
                 recordStrMutex.lock();
@@ -801,39 +810,7 @@ void MainWindow::processRawInput(HRAWINPUT rawInput)
             }
 
             //qDebug() << "deltaX,deltaY : " << deltaX << "," << deltaY;
-
-            // // 累积移动量
-            // m_accumulatedDeltaX += mouse.lLastX;
-            // m_accumulatedDeltaY += mouse.lLastY;
-
-            // // 检查是否到达记录时间
-            // qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
-            // if (currentTime - m_lastRecordTime >= m_recordInterval) {
-            //     if (m_accumulatedDeltaX != 0 || m_accumulatedDeltaY != 0) {
-            //         // 正在录制, 记录
-            //         if(getIsRecording()){
-            //             recordStrMutex.lock();
-            //             recordStr.append(QString::number(currentTime - startRecordTimeMs)).append(" ").append("mouseMove:")
-            //                     .append(QString::number(m_accumulatedDeltaX)).append(",").append(QString::number(m_accumulatedDeltaY)).append("\n");
-            //             recordStrMutex.unlock();
-            //         }
-
-            //         // 重新累计
-            //         m_accumulatedDeltaX = 0;
-            //         m_accumulatedDeltaY = 0;
-            //     }
-
-            //     // 新一轮累计
-            //     m_lastRecordTime = currentTime;
-            // }
         }
-
-        // // 处理按钮状态
-        // buttonFlags = mouse.usButtonFlags;
-
-        // // 获取当前鼠标绝对位置
-        // POINT cursorPos;
-        // GetCursorPos(&cursorPos);
     }
 }
 
@@ -905,6 +882,6 @@ void MainWindow::moveMouseToPos(int targetX, int targetY){
             }
         }
 
-        QThread::msleep(10);
+        QThread::msleep(15);
     }
 }
