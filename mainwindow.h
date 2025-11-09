@@ -9,6 +9,16 @@
 
 #define INITIAL_POS "initialPos"
 
+struct ActionInfo
+{
+    qint64 actionTime; // 操作时间
+    QString actionName;// 操作的按键名称
+    int keyboardScanCode;// 键盘按键的扫描码
+    int dx;// 鼠标移动的x轴量
+    int dy;// y轴量
+    bool isRelease;// 是否为松开按键
+};
+
 QT_BEGIN_NAMESPACE
 namespace Ui {
 class MainWindow;
@@ -43,23 +53,26 @@ private slots:
 private:
     Ui::MainWindow *ui;
 
-    bool isRecording = false; // 是否正在录制
-    qint64 startRecordTimeMs = 0; // 开始录制的时间, 毫秒
-    QMutex isRecordingMutex;// 互斥量
+    // 纳秒级高精度计时器
+    QElapsedTimer timer;
+
+    std::atomic<bool> isRecording{false}; // 是否正在录制
+    //qint64 startRecordTimeMs = 0; // 开始录制的时间, 毫秒
+    //QMutex isRecordingMutex;// 互斥量
 
 
-    bool isPlaying = false;// 是否正在播放
-    qint64 startPlayTimeMs = 0;// 开始播放的时间, 毫秒
-    QMutex isPlayingMutex;// 互斥量
+    std::atomic<bool> isPlaying{false};// 是否正在播放
+    //qint64 startPlayTimeMs = 0;// 开始播放的时间, 毫秒
+    //QMutex isPlayingMutex;// 互斥量
 
-    // 记录的时间间隔 ms
-    const qint64 m_recordInterval = 5;
+    // 记录的时间间隔 us
+    const qint64 m_recordInterval = 10;
 
     // 保存的录制文件所在文件夹
     QString appDataDir;
 
     // 添加时间控制成员变量
-    qint64 m_lastRecordTime = 0;
+    //qint64 m_lastRecordTime = 0;
 
     // 临时存储最新的鼠标数据
     int m_latestDeltaX = 0;
@@ -84,7 +97,7 @@ private:
 
     bool isKeyPressed(int keyScanCode);
     bool isMouseButtonPressed(int mouseButton);
-    void handleAndRecordKey(bool keyPressed, QString keyName, QSet<QString> *pressedKeySet, QString *recordStr);
+    void handleAndRecordKey(bool keyPressed, QString keyName, QSet<QString> *pressedKeySet, QString *recordStr, qint64 actionTime);
     bool saveRecorrdToFile(QString fileName, QString data);
 
     void simulateKeyPress(short scanCode, bool isKeyRelease);
@@ -123,6 +136,9 @@ private:
     void restoreMouseSettings() {
         SystemParametersInfo(SPI_SETMOUSESPEED, 0, (void*)m_originalSpeed, SPIF_UPDATEINIFILE);
     }
+
+    // 线性移动鼠标到指定位置
+    void moveMouseToPos(int targetX, int targetY);
 
 };
 #endif // MAINWINDOW_H
