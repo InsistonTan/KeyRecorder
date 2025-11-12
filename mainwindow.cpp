@@ -8,7 +8,7 @@
 #include <QCursor>
 #include <QInputDialog>
 #include <QMessageBox>
-#include <thread>
+#include <QScreen>
 
 MainWindow *mainWindow = nullptr;
 
@@ -386,6 +386,8 @@ void MainWindow::startRecordOrStop(){
         // 恢复播放按钮
         ui->pushButton_2->setDisabled(false);
         ui->pushButton_2->setStyleSheet("QPushButton{background-color:rgb(6, 200, 99);}");
+
+        showFramelessTransparentMessageBox("已结束录制");
     }else{
         setIsRecording(true);
 
@@ -397,6 +399,8 @@ void MainWindow::startRecordOrStop(){
         // 录制时, 不允许点击播放按钮
         ui->pushButton_2->setDisabled(true);
         ui->pushButton_2->setStyleSheet("QPushButton{background-color:rgb(220, 220, 220);}");
+
+        showFramelessTransparentMessageBox("正在录制");
 
         QtConcurrent::run([=](){
 
@@ -508,6 +512,8 @@ void MainWindow::startPlayOrStop(){
         // 恢复下拉框选择录制文件
         ui->comboBox->setDisabled(false);
         ui->comboBox->setStyleSheet("QComboBox{background-color:rgba(251, 251, 251, 1); padding-left:12px;}");
+
+        showFramelessTransparentMessageBox("已结束播放");
     }else{
         if(ui->comboBox->currentText().isEmpty()){
             QMessageBox::warning(this, "警告", "未选择录制文件, 无法播放!");
@@ -527,6 +533,8 @@ void MainWindow::startPlayOrStop(){
         // 不允许选择录制文件
         ui->comboBox->setDisabled(true);
         ui->comboBox->setStyleSheet("QComboBox{background-color:rgb(220, 220, 220);  padding-left:12px;}");
+
+        showFramelessTransparentMessageBox("正在播放");
 
         // 播放
         QtConcurrent::run([=](){
@@ -648,10 +656,25 @@ void MainWindow::startPlayOrStop(){
                 return;
             }
 
+            // 记录播放过程中鼠标 x,y的移动量, 用于恢复游戏视角
+            int moveX = 0, moveY = 0;
+
             // 循环播放
             while(getIsPlaying()){
-                // 移动鼠标到初始位置
-                moveMouseToPos(firstX, firstY);
+                // 移动鼠标到初始位置(绝对坐标)
+                if(ui->checkBox->isChecked()){
+                    // 线性移动鼠标到指定坐标
+                    moveMouseToPos(firstX, firstY);
+                }
+
+                // 恢复游戏视角为初始视角
+                if(ui->checkBox_2->isChecked()){
+                    // 线性移动鼠标, 相对移动
+                    moveMouseDxDy(-moveX, -moveY);
+                }
+
+                // 重置播放过程中鼠标 x,y的移动量
+                moveX = 0, moveY = 0;
 
                 // 高精度计时器开始计时
                 QElapsedTimer runTimer;
@@ -676,6 +699,10 @@ void MainWindow::startPlayOrStop(){
 
                     // 鼠标移动
                     if(actionInfo.actionName == "mouseMove"){
+                        // 记录播放过程中鼠标 x,y的移动量, 用于恢复游戏视角
+                        moveX += actionInfo.dx;
+                        moveY += actionInfo.dy;
+
                         // 模拟鼠标移动
                         simulateMouseRelativeMove(actionInfo.dx, actionInfo.dy);
                     }else if(actionInfo.actionName.contains("mouse")){
@@ -686,6 +713,8 @@ void MainWindow::startPlayOrStop(){
                         simulateKeyPress(actionInfo.keyboardScanCode, actionInfo.isRelease);
                     }
                 }
+
+                //runTimer.
 
                 // 等待一下再进入下一轮循环
                 QThread::msleep(500);
@@ -885,3 +914,128 @@ void MainWindow::moveMouseToPos(int targetX, int targetY){
         QThread::msleep(15);
     }
 }
+
+
+void MainWindow::moveMouseDxDy(int dx, int dy){
+    // 每次移动的步长
+    int stepLen = 8;
+
+    // 将当前鼠标线性相对移动 dx, dy
+    while(getIsPlaying()){
+        if(dx == 0 && dy == 0){
+            break;
+        }
+
+        int mX = 0, mY = 0;
+
+        if(dx < 0){
+            if(dx + stepLen < 0){
+                mX = -stepLen;
+                dx += stepLen;
+            }else{
+                mX = dx;
+                dx = 0;
+            }
+        }else{
+            if(dx - stepLen > 0){
+                mX = stepLen;
+                dx -= stepLen;
+            }else{
+                mX = dx;
+                dx = 0;
+            }
+        }
+
+        if(dy < 0){
+            if(dy + stepLen < 0){
+                mY = -stepLen;
+                dy += stepLen;
+            }else{
+                mY = dy;
+                dy = 0;
+            }
+        }else{
+            if(dy - stepLen > 0){
+                mY = stepLen;
+                dy -= stepLen;
+            }else{
+                mY = dy;
+                dy = 0;
+            }
+        }
+
+        simulateMouseRelativeMove(mX, mY);
+
+        QThread::msleep(5);
+    }
+}
+
+
+void MainWindow::showFramelessTransparentMessageBox(QString text){
+    // 创建一个QMessageBox
+    QMessageBox *msgBox = new QMessageBox();
+
+    // 设置无边框 [citation:3][citation:6][citation:8]
+    msgBox->setWindowFlags(Qt::FramelessWindowHint | Qt::Tool | Qt::WindowStaysOnTopHint);
+
+    // 设置背景透明 [citation:6][citation:7]
+    msgBox->setAttribute(Qt::WA_TranslucentBackground);
+
+    // 设置提示文本
+    msgBox->setText(text);
+
+    // 可选：移除标准按钮，仅显示文本
+    msgBox->setStandardButtons(QMessageBox::NoButton);
+
+    msgBox->setStyleSheet(
+        "QMessageBox {"
+        "    background-color: rgba(0, 0, 0, 0.5);" // 半透明黑色背景
+        "    border: none;" // 无边框 [citation:5]
+        "    border-radius: 8px;" // 圆角
+        "}"
+        "QLabel {"
+        "    color: rgb(6, 200, 99);" // 文字颜色
+        "    font-size: 24px;"
+        "    font-weight: bold;"
+        "    background: transparent;" // 标签背景透明
+        "}"
+        );
+
+    // 调整消息框大小
+    msgBox->adjustSize();
+
+    QScreen *screen = QApplication::primaryScreen();
+    QRect screenGeometry = screen->availableGeometry();
+    // 计算使消息框位于屏幕下方的位置
+    int x = (screenGeometry.width() - msgBox->width()) / 2; // 水平居中
+    int y = screenGeometry.height() - msgBox->height(); // 屏幕底部
+
+    //qDebug() << "screenGeometry.width():" << screenGeometry.width() << ", screenGeometry.height():" << screenGeometry.height() << "; x:" << x << ", y:"<< y;
+
+    // 移动消息框到计算位置
+    msgBox->move(x, y);
+
+
+    // 显示消息框
+    msgBox->show();
+
+    // 设置1秒后自动关闭 [该功能点未在搜索结果中直接提及，但根据用户需求添加]
+    QTimer::singleShot(1000, msgBox, &QMessageBox::deleteLater);
+}
+
+
+void MainWindow::on_checkBox_clicked()
+{
+    if(ui->checkBox->isChecked()){
+        ui->checkBox_2->setChecked(false);
+    }
+}
+
+
+void MainWindow::on_checkBox_2_clicked()
+{
+    if(ui->checkBox_2->isChecked()){
+        ui->checkBox->setChecked(false);
+    }
+}
+

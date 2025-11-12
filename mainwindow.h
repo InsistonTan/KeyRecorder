@@ -50,6 +50,10 @@ private slots:
 
     void on_pushButton_4_clicked();
 
+    void on_checkBox_clicked();
+
+    void on_checkBox_2_clicked();
+
 private:
     Ui::MainWindow *ui;
 
@@ -121,8 +125,13 @@ private:
         SystemParametersInfo(SPI_SETMOUSESPEED, 0, (void*)m_originalSpeed, SPIF_UPDATEINIFILE);
     }
 
-    // 线性移动鼠标到指定位置
+    // 线性移动鼠标到指定位置(绝对移动)
     void moveMouseToPos(int targetX, int targetY);
+
+    // 线性移动鼠标(相对移动)
+    void moveMouseDxDy(int dx, int dy);
+
+    void showFramelessTransparentMessageBox(QString text);
 
 };
 #endif // MAINWINDOW_H

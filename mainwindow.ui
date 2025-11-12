@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>391</width>
-    <height>275</height>
+    <width>405</width>
+    <height>312</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -18,8 +18,8 @@
   </property>
   <property name="maximumSize">
    <size>
-    <width>391</width>
-    <height>275</height>
+    <width>100000</width>
+    <height>100000</height>
    </size>
   </property>
   <property name="windowTitle">
@@ -30,7 +30,7 @@
     <property name="geometry">
      <rect>
       <x>20</x>
-      <y>210</y>
+      <y>250</y>
       <width>121</width>
       <height>41</height>
      </rect>
@@ -46,7 +46,7 @@
     <property name="geometry">
      <rect>
       <x>170</x>
-      <y>210</y>
+      <y>250</y>
       <width>121</width>
       <height>41</height>
      </rect>
@@ -88,7 +88,7 @@
     <property name="geometry">
      <rect>
       <x>90</x>
-      <y>170</y>
+      <y>210</y>
       <width>241</width>
       <height>19</height>
      </rect>
@@ -101,7 +101,7 @@
     <property name="geometry">
      <rect>
       <x>20</x>
-      <y>170</y>
+      <y>210</y>
       <width>69</width>
       <height>19</height>
      </rect>
@@ -134,6 +134,38 @@
     </property>
     <property name="text">
      <string>刷新</string>
+    </property>
+   </widget>
+   <widget class="QCheckBox" name="checkBox">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>150</y>
+      <width>311</width>
+      <height>23</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>每轮播放前将鼠标移动到录制时初始位置</string>
+    </property>
+    <property name="checked">
+     <bool>true</bool>
+    </property>
+   </widget>
+   <widget class="QCheckBox" name="checkBox_2">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>170</y>
+      <width>381</width>
+      <height>23</height>
+     </rect>
+    </property>
+    <property name="text">
+     <string>下一轮播放前将游戏视角恢复到第一轮的初始视角</string>
+    </property>
+    <property name="checked">
+     <bool>false</bool>
     </property>
    </widget>
   </widget>
